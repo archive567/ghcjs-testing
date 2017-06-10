@@ -97,7 +97,7 @@ executable ghcjs-testing
   hs-source-dirs:
     ./
   main-is:
-    readme.lhs
+    ghcjs-testing.lhs
   build-depends:
     base >= 4.7 && < 5,
     protolude,

@@ -1,9 +1,9 @@
 <header>
 <meta charset="utf-8"> <link rel="stylesheet" href="https://tonyday567.github.io/other/lhs.css">
 </header>
-<h1 id="ghcjs-testing"><a href="https://tonyday567.github.com/ghcjs-testing">ghcjs-testing</a></h1>
-<p>Minimal ghcjs install and test.</p>
-<p>This is old-school web page development: <code>readme.lhs</code> is used to render a html page, and the code below creates some javascript that tweaks said page.</p>
+<h1 id="ghcjs-testing"><a href="https://github.com/tonyday567/ghcjs-testing">ghcjs-testing</a></h1>
+<p>Minimal ghcjs install and test page.</p>
+<p>This is old-school web page development: <code>example.lhs</code> is used to render a html page, and the code below creates some javascript that tweaks said page.</p>
 <script language="javascript" src="other/ghcjs-testing.js"></script>
 <h1 id="code">code</h1>
 <div class="sourceCode"><pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">{-# LANGUAGE OverloadedStrings #-}</span>
@@ -23,19 +23,282 @@ main <span class="fu">=</span> <span class="kw">do</span>
     onload <span class="fu">$</span> <span class="kw">do</span>
        alert <span class="st">&quot;window has loaded&quot;</span>
        consoleLog <span class="st">&quot;consolLog is a synonym for putStrLn&quot;</span></code></pre></div>
-<h1 id="compiling">compiling</h1>
-<p>The recipe below handles the bits and bobs you need to do every re-compile:</p>
-<ul class="incremental">
-<li>stack build</li>
-<li>rendering of the page</li>
-<li>optimize (and copy) the js via <a href="http://dl.google.com/closure-compiler">closure</a></li>
-</ul>
-<pre>
-  <code style="white-space: pre-wrap;">
-stack build --exec "pandoc -f markdown+lhs -i readme.lhs -t html -o index.html" --exec "pandoc -f markdown+lhs -i readme.lhs -t markdown -o readme.md" --exec "java -jar $(stack path --local-bin)/closure-compiler-v20170124.jar --js_output_file=other/ghcjs-testing.js $(stack path --local-install-root)/bin/ghcjs-testing.jsexe/all.js"
-  </code>
-</pre>
-<h1 id="reference">reference</h1>
-<p><a href="https://github.com/ghcjs/ghcjs/wiki/GHCJS-User-Guide">ghcjs user guide</a></p>
-<p><a href="https://github.com/ghcjs/ghcjs-base">ghcjs-base</a></p>
-<p><a href="https://developer.mozilla.org/en-US/docs">mdn</a></p>
+<h1 id="some-plain-vanilla-js-code">Some plain vanilla js code</h1>
+<div class="sourceCode"><pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">{-# LANGUAGE OverloadedStrings #-}</span>
+<span class="ot">{-# OPTIONS_GHC -fno-warn-type-defaults #-}</span>
+
+<span class="kw">module</span> <span class="dt">Vanilla</span>
+  ( <span class="dt">Element</span>(<span class="fu">..</span>)
+  , <span class="dt">Selector</span>
+  , consoleLog
+  , alert
+  , onload
+  , addClass
+  , removeClass
+  , setHtml
+  , docElement
+  , elementsOf
+  , elementOf
+  , getValue
+  , setValue
+  , itemId
+  , focus
+  , checked
+  , keyCode
+  , getHash
+  , on
+  , onWindow
+  , delegate
+  , <span class="dt">JSVal</span>
+  , toJSVal
+  , asyncCallback
+  ) <span class="kw">where</span>
+
+<span class="kw">import </span><span class="dt">Clay.Render</span> (renderSelector)
+<span class="kw">import </span><span class="dt">Clay.Selector</span> (<span class="dt">Selector</span>)
+<span class="kw">import </span><span class="dt">Data.Char</span>
+<span class="kw">import </span><span class="dt">Data.Foldable</span>
+<span class="kw">import </span><span class="dt">Data.Maybe</span> (fromJust)
+<span class="kw">import </span><span class="dt">Data.Typeable</span>
+<span class="kw">import </span><span class="dt">Lucid</span>
+<span class="kw">import </span><span class="dt">Protolude</span> <span class="kw">hiding</span> (<span class="dt">Selector</span>, on)
+<span class="kw">import </span><span class="dt">Unsafe.Coerce</span> (unsafeCoerce)
+
+<span class="kw">import qualified</span> <span class="dt">Data.Text.Lazy</span> <span class="kw">as</span> <span class="dt">LText</span>
+<span class="kw">import qualified</span> <span class="dt">Text.Read</span> <span class="kw">as</span> <span class="dt">Text</span>
+
+<span class="kw">import </span><span class="dt">GHCJS.Types</span>
+<span class="kw">import </span><span class="dt">GHCJS.Marshal</span>
+<span class="kw">import </span><span class="dt">GHCJS.Foreign</span>
+<span class="kw">import </span><span class="dt">GHCJS.Foreign.Callback</span>
+<span class="kw">import </span><span class="dt">GHCJS.Nullable</span> (maybeToNullable, nullableToMaybe, <span class="dt">Nullable</span>)
+<span class="kw">import </span><span class="dt">Data.JSString.Text</span> (textToJSString, textFromJSString, lazyTextToJSString, lazyTextFromJSString)
+
+<span class="kw">data</span> <span class="dt">Element</span> <span class="fu">=</span> <span class="dt">Element</span> <span class="dt">JSVal</span>
+
+fromHtml <span class="fu">=</span> lazyTextToJSString <span class="fu">.</span> renderText
+
+fromSel <span class="fu">=</span> lazyTextToJSString <span class="fu">.</span> renderSelector
+
+<span class="co">-- * the big 3</span>
+<span class="co">-- | console.log</span>
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;console.log($1)&quot;</span>
+<span class="ot">    js_consoleLog ::</span> <span class="dt">JSString</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+
+<span class="ot">consoleLog ::</span> <span class="dt">Text</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+consoleLog a <span class="fu">=</span> js_consoleLog (textToJSString a)
+
+foreign <span class="kw">import </span>javascript unsafe
+  <span class="st">&quot;alert($1)&quot;</span><span class="ot"> js_alert ::</span> <span class="dt">JSString</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+
+<span class="ot">alert ::</span> <span class="dt">Text</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+alert t <span class="fu">=</span> js_alert (textToJSString t)
+
+foreign <span class="kw">import </span>javascript unsafe &quot;window.onload = $1&quot;
+<span class="ot">  js_onload ::</span> <span class="dt">Callback</span> (<span class="dt">IO</span> ()) <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+
+<span class="ot">onload ::</span> <span class="dt">IO</span> () <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+onload f <span class="fu">=</span> <span class="kw">do</span>
+    f_ <span class="ot">&lt;-</span> asyncCallback f
+    js_onload f_
+
+
+<span class="co">-- * element manipulation</span>
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;$1.classList.add($2)&quot;</span>
+<span class="ot">    js_classListAdd ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">JSString</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+
+<span class="ot">addClass ::</span> <span class="dt">Element</span> <span class="ot">-&gt;</span> <span class="dt">Selector</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+addClass (<span class="dt">Element</span> el) sel <span class="fu">=</span>
+    js_classListAdd el (fromSel sel)
+
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;$1.classList.remove($2)&quot;</span>
+<span class="ot">    js_classListRemove ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">JSString</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+
+<span class="ot">removeClass ::</span> <span class="dt">Element</span> <span class="ot">-&gt;</span> <span class="dt">Selector</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+removeClass (<span class="dt">Element</span> el) sel <span class="fu">=</span>
+    js_classListRemove el (fromSel sel)
+
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;$1.innerHTML = $2&quot;</span>
+<span class="ot">    js_innerHtml ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">JSString</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+
+<span class="ot">setHtml ::</span> <span class="dt">Element</span> <span class="ot">-&gt;</span> <span class="dt">Html</span> () <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+setHtml (<span class="dt">Element</span> el) html <span class="fu">=</span>
+    js_innerHtml el (fromHtml html)
+
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;document.querySelector($1)&quot;</span>
+<span class="ot">    js_docQuerySelector ::</span> <span class="dt">JSString</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">JSVal</span>
+
+<span class="co">-- | element selection</span>
+<span class="ot">docElement ::</span> <span class="dt">Selector</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">Element</span>
+docElement sel <span class="fu">=</span>
+    <span class="dt">Element</span> <span class="fu">&lt;$&gt;</span> js_docQuerySelector (fromSel sel)
+
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;$1.querySelectorAll($2)&quot;</span>
+<span class="ot">    js_querySelectorAll ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">JSString</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">JSVal</span>
+
+<span class="ot">elementsOf ::</span> <span class="dt">Element</span> <span class="ot">-&gt;</span> <span class="dt">Selector</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">JSVal</span>
+elementsOf (<span class="dt">Element</span> el) sel <span class="fu">=</span> js_querySelectorAll el (fromSel sel)
+
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;$1.querySelector($2)&quot;</span>
+<span class="ot">    js_querySelector ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">JSString</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">JSVal</span>
+
+<span class="ot">elementOf ::</span> <span class="dt">Element</span> <span class="ot">-&gt;</span> <span class="dt">Selector</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">JSVal</span>
+elementOf (<span class="dt">Element</span> el) sel <span class="fu">=</span> js_querySelector el (fromSel sel)
+
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;$1.value&quot;</span>
+<span class="ot">    js_getValue ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">JSString</span>
+
+<span class="ot">getValue ::</span> <span class="dt">Element</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">Text</span>
+getValue (<span class="dt">Element</span> el) <span class="fu">=</span> textFromJSString <span class="fu">&lt;$&gt;</span> js_getValue el
+
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;$1.value = $2&quot;</span>
+<span class="ot">    js_setValue ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">JSString</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+
+<span class="ot">setValue ::</span> <span class="dt">Element</span> <span class="ot">-&gt;</span> <span class="dt">Text</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+setValue (<span class="dt">Element</span> el) val <span class="fu">=</span> js_setValue el (textToJSString val)
+
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;$1.dataset.id&quot;</span>
+<span class="ot">    js_getDatasetId ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">JSString</span>
+
+<span class="ot">itemId ::</span> <span class="dt">Element</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">Maybe</span> <span class="dt">Int</span>)
+itemId (<span class="dt">Element</span> el) <span class="fu">=</span> <span class="kw">do</span>
+    i <span class="ot">&lt;-</span> js_getDatasetId el
+    pure <span class="fu">$</span> readMaybe (LText.unpack <span class="fu">$</span> lazyTextFromJSString i)
+
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;$1.focus()&quot;</span>
+<span class="ot">    js_focus ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+
+<span class="ot">focus ::</span> <span class="dt">Element</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+focus (<span class="dt">Element</span> el) <span class="fu">=</span> js_focus el
+
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;$1.item($2)&quot;</span>
+<span class="ot">    js_getItem ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">Int</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">Nullable</span> <span class="dt">JSVal</span>)
+
+<span class="co">-- getItem :: NodeList -&gt; Int -&gt; IO (Maybe Node)</span>
+<span class="ot">getItem ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">Int</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">Maybe</span> <span class="dt">JSVal</span>)
+getItem list n <span class="fu">=</span>
+  nullableToMaybe <span class="fu">&lt;$&gt;</span> js_getItem list n
+
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;$1.keyCode&quot;</span>
+<span class="ot">    js_keyCode ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">Int</span>
+
+<span class="ot">keyCode ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">Int</span>
+keyCode ev <span class="fu">=</span> js_keyCode ev
+
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;document.location.hash&quot;</span>
+<span class="ot">    js_getHash ::</span> <span class="dt">IO</span> <span class="dt">JSString</span>
+
+<span class="ot">getHash ::</span> <span class="dt">IO</span> <span class="dt">JSString</span>
+getHash <span class="fu">=</span> js_getHash
+
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;$1.checked&quot;</span>
+<span class="ot">    js_checked ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">Bool</span>
+
+<span class="ot">checked ::</span> <span class="dt">Element</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">Bool</span>
+checked (<span class="dt">Element</span> el) <span class="fu">=</span> js_checked el
+
+<span class="co">-- * event listening</span>
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;$1.addEventListener($2,$3,$4)&quot;</span>
+<span class="ot">    js_addEventListener ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">JSString</span> <span class="ot">-&gt;</span> <span class="dt">Callback</span> (<span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()) <span class="ot">-&gt;</span> <span class="dt">Bool</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+
+<span class="ot">on ::</span> <span class="dt">Element</span> <span class="ot">-&gt;</span> <span class="dt">Text</span> <span class="ot">-&gt;</span> (<span class="dt">Element</span> <span class="ot">-&gt;</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()) <span class="ot">-&gt;</span> <span class="dt">IO</span> () 
+on (<span class="dt">Element</span> el) uiAction handler <span class="fu">=</span> <span class="kw">do</span>
+  handler&#39; <span class="ot">&lt;-</span> asyncCallback1 (handler (<span class="dt">Element</span> el))
+  js_addEventListener el (textToJSString uiAction) handler&#39; <span class="dt">False</span>
+
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;window.addEventListener($1,$2,$3)&quot;</span>
+<span class="ot">    jsWindowAddEventListener ::</span> <span class="dt">JSString</span> <span class="ot">-&gt;</span> <span class="dt">Callback</span> (<span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()) <span class="ot">-&gt;</span> <span class="dt">Bool</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+
+<span class="co">-- null = maybeToNullable Nothing</span>
+
+<span class="ot">onWindow ::</span> <span class="dt">LText.Text</span> <span class="ot">-&gt;</span> (<span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()) <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+onWindow uiAction handler <span class="fu">=</span> <span class="kw">do</span>
+  handler&#39; <span class="ot">&lt;-</span> asyncCallback1 handler
+  jsWindowAddEventListener
+    (lazyTextToJSString uiAction)
+    handler&#39;
+    <span class="dt">False</span>
+
+<span class="ot">delegate ::</span> <span class="dt">Element</span> <span class="ot">-&gt;</span> <span class="dt">Selector</span> <span class="ot">-&gt;</span> <span class="dt">Text</span> <span class="ot">-&gt;</span> (<span class="dt">Element</span> <span class="ot">-&gt;</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()) <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+delegate (<span class="dt">Element</span> base) pattern0 ev action <span class="fu">=</span> <span class="kw">do</span>
+  <span class="kw">let</span> useCapture <span class="fu">=</span> ev <span class="fu">==</span> <span class="st">&quot;blur&quot;</span> <span class="fu">||</span> ev <span class="fu">==</span> <span class="st">&quot;focus&quot;</span>
+  dispatch <span class="ot">&lt;-</span> asyncCallback1 <span class="fu">$</span> applyIn (<span class="dt">Element</span> base) pattern0 action 
+  js_addEventListener base (textToJSString ev) dispatch useCapture
+
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;$1.target&quot;</span>
+<span class="ot">    js_target ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">JSVal</span>
+
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;$1===$2&quot;</span>
+<span class="ot">    js_eq ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">Bool</span>
+
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;$1.length&quot;</span>
+<span class="ot">    js_length ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">Int</span>
+
+<span class="ot">applyIn ::</span> <span class="dt">Element</span> <span class="ot">-&gt;</span> <span class="dt">Selector</span> <span class="ot">-&gt;</span> (<span class="dt">Element</span> <span class="ot">-&gt;</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()) <span class="ot">-&gt;</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> ()
+applyIn base pattern0 action ev <span class="fu">=</span> <span class="kw">do</span>
+  t <span class="ot">&lt;-</span> js_target ev
+  p <span class="ot">&lt;-</span> elementsOf base pattern0
+  n <span class="ot">&lt;-</span> js_length p
+  elem&#39; <span class="ot">&lt;-</span> findM
+           (\x <span class="ot">-&gt;</span> <span class="kw">do</span>
+               item <span class="ot">&lt;-</span> getItem p x
+               <span class="kw">case</span> item <span class="kw">of</span>
+                 <span class="dt">Nothing</span> <span class="ot">-&gt;</span> pure <span class="dt">False</span>
+                 <span class="dt">Just</span> item&#39; <span class="ot">-&gt;</span> js_eq t item&#39;) [<span class="dv">0</span><span class="fu">..</span>n]
+  <span class="kw">case</span> elem&#39; <span class="kw">of</span>
+    <span class="dt">Nothing</span> <span class="ot">-&gt;</span> pure ()
+    <span class="dt">Just</span> iElem <span class="ot">-&gt;</span> <span class="kw">do</span>
+      eitem <span class="ot">&lt;-</span> getItem p iElem
+      <span class="kw">case</span> eitem <span class="kw">of</span>
+        <span class="dt">Nothing</span> <span class="ot">-&gt;</span> pure ()
+        <span class="dt">Just</span> eitem&#39; <span class="ot">-&gt;</span> <span class="kw">do</span>
+            li <span class="ot">&lt;-</span> findUp (<span class="dt">Element</span> eitem&#39;) <span class="st">&quot;li&quot;</span>
+            <span class="kw">case</span> li <span class="kw">of</span>
+              <span class="dt">Nothing</span> <span class="ot">-&gt;</span> print <span class="st">&quot;no li parent???&quot;</span>
+              <span class="dt">Just</span> li&#39; <span class="ot">-&gt;</span> action li&#39; ev
+
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;$1.parentElement&quot;</span>
+<span class="ot">    js_parentElement ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">Nullable</span> <span class="dt">JSVal</span>)
+
+foreign <span class="kw">import </span>javascript unsafe
+    <span class="st">&quot;$1.tagName&quot;</span>
+<span class="ot">    js_tagName ::</span> <span class="dt">JSVal</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">JSString</span>
+
+<span class="co">-- | go up the tree and find an element, if it exists</span>
+<span class="ot">findUp ::</span> <span class="dt">Element</span> <span class="ot">-&gt;</span> <span class="dt">LText.Text</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> (<span class="dt">Maybe</span> <span class="dt">Element</span>)
+findUp (<span class="dt">Element</span> base) sel <span class="fu">=</span> <span class="kw">do</span>
+  parent <span class="ot">&lt;-</span> nullableToMaybe <span class="fu">&lt;$&gt;</span> js_parentElement base
+  <span class="kw">case</span> parent <span class="kw">of</span>
+    <span class="dt">Nothing</span> <span class="ot">-&gt;</span> pure <span class="dt">Nothing</span>
+    <span class="dt">Just</span> parent&#39; <span class="ot">-&gt;</span> <span class="kw">do</span>
+      name <span class="ot">&lt;-</span> js_tagName parent&#39;
+      <span class="kw">if</span> (LText.toLower <span class="fu">$</span> lazyTextFromJSString name) <span class="fu">==</span> (LText.toLower sel)
+        <span class="kw">then</span> pure <span class="fu">$</span> <span class="dt">Just</span> (<span class="dt">Element</span> parent&#39;)
+        <span class="kw">else</span> findUp (<span class="dt">Element</span> parent&#39;) sel
+
+<span class="ot">findM ::</span> (<span class="dt">Monad</span> m, <span class="dt">Traversable</span> t) <span class="ot">=&gt;</span> (a <span class="ot">-&gt;</span> m <span class="dt">Bool</span>) <span class="ot">-&gt;</span> t a <span class="ot">-&gt;</span> m (<span class="dt">Maybe</span> a)
+findM p <span class="fu">=</span> fmap (getFirst <span class="fu">.</span> fold) <span class="fu">.</span> mapM 
+       (fmap <span class="dt">First</span> <span class="fu">.</span> (\x <span class="ot">-&gt;</span> <span class="kw">do</span>
+           p&#39; <span class="ot">&lt;-</span> p x
+           pure <span class="fu">$</span> <span class="kw">if</span> p&#39; <span class="kw">then</span> <span class="dt">Just</span> x <span class="kw">else</span> <span class="dt">Nothing</span>))</code></pre></div>

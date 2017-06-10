@@ -1,3 +1,4 @@
+\begin{code}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 
@@ -276,3 +277,4 @@ findM p = fmap (getFirst . fold) . mapM
        (fmap First . (\x -> do
            p' <- p x
            pure $ if p' then Just x else Nothing))
+\end{code}
