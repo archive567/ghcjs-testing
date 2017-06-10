@@ -1,6 +1,9 @@
 [ghcjs-testing](https://github.com/tonyday567/ghcjs-testing)
 ============================================================
 
+[![Build Status](https://travis-ci.org/tonyday567/ghcjs-testing.png?branch=master)](https://travis-ci.org/tonyday567/ghcjs-testing)
+
+
 Minimal ghcjs install and test.
 
 
