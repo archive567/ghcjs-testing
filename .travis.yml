@@ -36,12 +36,12 @@ before_install:
 - export PATH=$HOME/.local/bin:$PATH
 - travis_retry curl -L https://www.stackage.org/stack/linux-x86_64 | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
 
-install:
+script:
 # Build dependencies
 # - stack --no-terminal --install-ghc test --only-dependencies
-- stack --no-terminal --install-ghc build --only-dependencies
+- stack --no-terminal --install-ghc build --only-dependencies --ghc-options="-fno-code"
 
-script:
+# script:
 # Build the package, its tests, and its docs and run the tests
 # - stack --no-terminal test --haddock --no-haddock-deps
 # - stack --no-terminal build -j1

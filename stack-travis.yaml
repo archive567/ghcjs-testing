@@ -3,9 +3,7 @@ resolver: lts-7.15
 packages:
 - '.'
 
-extra-deps:
-- ghcjs-dom-0.7.0.4
-- ghcjs-dom-jsffi-0.7.0.4
+extra-deps: []
 
 flags: {}
 extra-package-dbs: []
@@ -25,5 +23,5 @@ setup-info:
 
 ghc-options:
     # All packages
-    "*": -j1
+    # "*": -j1
     # some-package: -DSOME_CPP_FLAG
